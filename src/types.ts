@@ -110,7 +110,7 @@ export type TrackCard = {
   albumName: string | null
   imageUrl: string | null
   durationMs: number
-  popularity: number
+  popularity: number | null
   previewUrl: string | null
   externalUrl: string | null
 }

@@ -6,7 +6,7 @@ import { Poster } from '../components/Poster'
 import { MusicSearch } from '../components/MusicSearch'
 import { Reveal } from '../components/Reveal'
 import { EmptyState, ErrorState, LoadingGrid, Spinner } from '../components/States'
-import { api, errorMessage, withQuery } from '../lib/api'
+import { api, spotifyErrorMessage, spotifyStatusMessage, withQuery } from '../lib/api'
 import { formatClock, isAbort, useTitle } from '../lib/format'
 import type { AlbumPage, AuthUrl, SpotifyProfile, TrackCard } from '../types'
 import { ghostButton, panel, primaryButton } from '../ui'
@@ -36,16 +36,33 @@ export default function SpotifyPage() {
   const [attempt, setAttempt] = useState(0)
   const reduce = useReducedMotion() ?? false
   const skipRangeReload = useRef(true)
+  const callbackErrorPending = useRef(false)
 
   useEffect(() => {
     const id = params.get('userId')
     const failure = params.get('error')
+    const failureStatus = params.get('errorStatus')
     if (id) {
       localStorage.setItem(STORAGE_KEY, id)
       setUserId(id)
     }
-    if (failure) setError(failure)
-    if (id || failure) setParams({}, { replace: true })
+    if (failureStatus) {
+      callbackErrorPending.current = true
+      setError(spotifyStatusMessage(Number(failureStatus)) ?? 'No se pudo completar la solicitud a Spotify.')
+    } else if (failure) {
+      callbackErrorPending.current = true
+      setError(failure === 'access_denied'
+        ? 'Esta cuenta de Spotify no está autorizada para esta demo.'
+        : 'No se pudo completar la solicitud a Spotify.')
+    }
+    if (id || failure || failureStatus || params.has('errorCode')) {
+      const nextParams = new URLSearchParams(params)
+      nextParams.delete('userId')
+      nextParams.delete('error')
+      nextParams.delete('errorStatus')
+      nextParams.delete('errorCode')
+      setParams(nextParams, { replace: true })
+    }
   }, [params, setParams])
 
   useEffect(() => {
@@ -58,7 +75,11 @@ export default function SpotifyPage() {
     }
     const controller = new AbortController()
     setLoading(true)
-    setError(null)
+    if (callbackErrorPending.current) {
+      callbackErrorPending.current = false
+    } else {
+      setError(null)
+    }
     Promise.all([
       api.get<SpotifyProfile>(withQuery('/api/spotify/profile', { userId }), { signal: controller.signal }),
       api.get<AlbumPage>(withQuery('/api/spotify/albums', { userId, offset: 0 }), { signal: controller.signal }),
@@ -71,7 +92,7 @@ export default function SpotifyPage() {
       })
       .catch((reason: unknown) => {
         if (isAbort(reason)) return
-        setError(errorMessage(reason))
+        setError(spotifyErrorMessage(reason))
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false)
@@ -92,7 +113,7 @@ export default function SpotifyPage() {
       .then(setTracks)
       .catch((reason: unknown) => {
         if (isAbort(reason)) return
-        setError(errorMessage(reason))
+        setError(spotifyErrorMessage(reason))
       })
       .finally(() => {
         if (!controller.signal.aborted) setTrackLoading(false)
@@ -107,17 +128,18 @@ export default function SpotifyPage() {
       const response = await api.get<AuthUrl>('/api/spotify/login')
       window.location.assign(response.authorizationUrl)
     } catch (reason) {
-      setError(errorMessage(reason))
+      setError(spotifyErrorMessage(reason))
       setConnecting(false)
     }
   }
 
   async function disconnect() {
+    let disconnectError: string | null = null
     if (userId) {
       try {
         await api.del(withQuery('/api/spotify/session', { userId }))
-      } catch {
-        // La sesión local se cierra aunque el servidor no responda.
+      } catch (reason) {
+        disconnectError = spotifyErrorMessage(reason)
       }
     }
     localStorage.removeItem(STORAGE_KEY)
@@ -125,7 +147,7 @@ export default function SpotifyPage() {
     setProfile(null)
     setAlbums(null)
     setTracks(null)
-    setError(null)
+    setError(disconnectError)
   }
 
   async function more() {
@@ -137,7 +159,7 @@ export default function SpotifyPage() {
         current ? { ...next, albums: [...current.albums, ...next.albums] } : next,
       )
     } catch (reason) {
-      setError(errorMessage(reason))
+      setError(spotifyErrorMessage(reason))
     } finally {
       setMorePending(false)
     }
@@ -178,14 +200,16 @@ export default function SpotifyPage() {
         <div>
           <p className="text-xs uppercase tracking-[0.28em] text-[var(--accent)]">Spotify</p>
           <h1 className="mt-3 font-serif text-5xl tracking-tight">{profile?.displayName ?? 'Tu cuenta'}</h1>
-          <p className="mt-2 text-sm text-[var(--muted)]">
-            {[profile?.email, productLabel(profile?.product)].filter(Boolean).join(' · ')}
-          </p>
         </div>
         <button className={ghostButton} type="button" onClick={() => void disconnect()}>
           Cerrar sesión
         </button>
       </div>
+      {error && profile ? (
+        <p className="mt-4 max-w-xl text-sm text-rose-200" role="alert">
+          {error}
+        </p>
+      ) : null}
       {loading ? (
         <div className="mt-10">
           <LoadingGrid count={4} />
@@ -289,9 +313,4 @@ export default function SpotifyPage() {
       )}
     </Reveal>
   )
-}
-
-function productLabel(product?: string | null) {
-  if (!product) return null
-  return product.charAt(0).toUpperCase() + product.slice(1)
 }
