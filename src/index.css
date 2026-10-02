@@ -1,0 +1,47 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+  --bg: #07080c;
+  --ink: #f6f1e8;
+  --muted: #c4bdb2;
+  --accent: #d9d2ff;
+  --glow-a: #6d5dfc;
+  --glow-b: #ff6fa8;
+  --glow-c: #3db7ff;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: Outfit, "Segoe UI", sans-serif;
+}
+
+::selection {
+  background: var(--accent);
+  color: #140e09;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.28) transparent;
+}
+
+.grain {
+  background-image: radial-gradient(rgba(255, 255, 255, 0.22) 0.55px, transparent 0.55px);
+  background-size: 3px 3px;
+}
