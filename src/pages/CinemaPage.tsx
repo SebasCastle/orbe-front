@@ -21,6 +21,12 @@ function readRecent() {
   }
 }
 
+function normalizeSearchQuery(title: string) {
+  return title
+    .trim()
+    .replace(/\s+/g, '-')
+}
+
 export default function CinemaPage() {
   useTitle('Cine')
   const [params, setParams] = useSearchParams()
@@ -46,8 +52,9 @@ export default function CinemaPage() {
     const controller = new AbortController()
     setLoading(true)
     setError(null)
+    const searchQuery = normalizeSearchQuery(query)
     api
-      .get<SearchResponse>(withQuery('/api/cinema/search', { q: query, page }), { signal: controller.signal })
+      .get<SearchResponse>(withQuery('/api/cinema/search', { q: searchQuery, page }), { signal: controller.signal })
       .then((response) => {
         setData(response)
         const next = [query, ...readRecent().filter((item) => item.toLowerCase() !== query.toLowerCase())].slice(0, 6)
